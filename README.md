@@ -1,94 +1,144 @@
 # PawPal+ (Module 2 Project)
 
-You are building **PawPal+**, a Streamlit app that helps a pet owner plan care tasks for their pet.
+PawPal+ is a pet care planner for busy owners. It tracks care tasks (walks, feeding, meds, vet visits) across **multiple pets**, then uses a `Scheduler` to sort them by time, filter them, warn about conflicts, and automatically repeat daily/weekly tasks. The logic lives in `pawpal_system.py`, is demonstrated from the terminal in `main.py`, verified with pytest, and shown in a Streamlit UI (`app.py`).
 
-## Scenario
+## System overview
 
-A busy pet owner needs help staying consistent with pet care. They want an assistant that can:
+| Class | Responsibility |
+|-------|----------------|
+| `Task` | One activity: `description`, `time` ("HH:MM"), `duration_minutes`, `priority`, `frequency` (once/daily/weekly), `due_date`, `completed`. `mark_complete()` marks it done; `next_occurrence()` builds the next repeat. |
+| `Pet` | Name, species and a list of `Task`s. `add_task()`, `remove_task()` and `list_tasks()` manage them; adding a task stamps it with the pet's name. |
+| `Owner` | Name and a list of `Pet`s. `add_pet()`, `get_pet()`, and `get_all_tasks()`, which returns every pet's tasks together. |
+| `Scheduler` | The "brain". Reads all tasks through `Owner.get_all_tasks()` (so it always works across multiple pets) and provides sorting, filtering, conflict detection, recurrence and a daily schedule. |
 
-- Track pet care tasks (walks, feeding, meds, enrichment, grooming, etc.)
-- Consider constraints (time available, priority, owner preferences)
-- Produce a daily plan and explain why it chose that plan
-
-Your job is to design the system first (UML), then implement the logic in Python, then connect it to the Streamlit UI.
-
-## What you will build
-
-Your final app should:
-
-- Let a user enter basic owner + pet info
-- Let a user add/edit tasks (duration + priority at minimum)
-- Generate a daily schedule/plan based on constraints and priorities
-- Display the plan clearly (and ideally explain the reasoning)
-- Include tests for the most important scheduling behaviors
+The UML is in `diagrams/uml_final.mmd` (Mermaid source; `diagrams/uml_draft.mmd` is the original draft and `diagrams/uml.mmd` mirrors the final version).
 
 ## Getting started
 
-### Setup
-
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate  # Windows PowerShell: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-### Suggested workflow
+Run the CLI demo:
 
-1. Read the scenario carefully and identify requirements and edge cases.
-2. Draft a UML diagram (classes, attributes, methods, relationships).
-3. Convert UML into Python class stubs (no logic yet).
-4. Implement scheduling logic in small increments.
-5. Add tests to verify key behaviors.
-6. Connect your logic to the Streamlit UI in `app.py`.
-7. Refine UML so it matches what you actually built.
+```bash
+python main.py
+```
+
+Run the Streamlit app:
+
+```bash
+streamlit run app.py
+```
+
+Run the tests:
+
+```bash
+python -m pytest
+```
+
+## Features
+
+- **Multi-pet scheduling:** one owner, many pets; the Scheduler works across all of them.
+- **Sorting by time:** chronological order by date, then "HH:MM", then priority.
+- **Filtering:** by pet name and/or completion status.
+- **Conflict warnings:** flags two pending tasks at the same date and time, for the same pet or different pets, and returns warning text instead of crashing.
+- **Recurring tasks:** completing a daily or weekly task automatically creates the next occurrence.
+- **Input validation:** bad times, priorities or frequencies raise a clear `ValueError`.
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
+Output of `python main.py` (tasks are added out of order on purpose, and two tasks share 08:00 to trigger a conflict):
 
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+PawPal+ for Jordan: 2 pets, 5 tasks
+
+=== As added (unsorted) ===
+  Date       Time   Pet       Task                  Min  Priority Repeats Status
+  ------------------------------------------------------------------------------
+  2026-10-19 18:00  Mochi     Evening walk           30  medium   daily   todo
+  2026-10-19 08:00  Mochi     Morning walk           30  high     daily   todo
+  2026-10-19 13:30  Mochi     Vet checkup            60  medium   once    todo
+  2026-10-19 07:30  Whiskers  Breakfast feeding      10  high     daily   todo
+  2026-10-19 08:00  Whiskers  Flea medication         5  high     weekly  todo
+
+=== Sorted by time ===
+  Date       Time   Pet       Task                  Min  Priority Repeats Status
+  ------------------------------------------------------------------------------
+  2026-10-19 07:30  Whiskers  Breakfast feeding      10  high     daily   todo
+  2026-10-19 08:00  Mochi     Morning walk           30  high     daily   todo
+  2026-10-19 08:00  Whiskers  Flea medication         5  high     weekly  todo
+  2026-10-19 13:30  Mochi     Vet checkup            60  medium   once    todo
+  2026-10-19 18:00  Mochi     Evening walk           30  medium   daily   todo
+
+=== Filter: Mochi's tasks only ===
+  Date       Time   Pet       Task                  Min  Priority Repeats Status
+  ------------------------------------------------------------------------------
+  2026-10-19 18:00  Mochi     Evening walk           30  medium   daily   todo
+  2026-10-19 08:00  Mochi     Morning walk           30  high     daily   todo
+  2026-10-19 13:30  Mochi     Vet checkup            60  medium   once    todo
+
+=== Conflict check ===
+  WARNING: Conflict on 2026-10-19 at 08:00: Morning walk (Mochi), Flea medication (Whiskers)
+
+=== Completing 'Morning walk' (daily) ===
+  Marked done: Morning walk on 2026-10-19
+  Next occurrence created for: 2026-10-20 at 08:00
+
+=== Filter: completed tasks ===
+  Date       Time   Pet       Task                  Min  Priority Repeats Status
+  ------------------------------------------------------------------------------
+  2026-10-19 08:00  Mochi     Morning walk           30  high     daily   done
+
+=== Today's Schedule (pending) ===
+  Date       Time   Pet       Task                  Min  Priority Repeats Status
+  ------------------------------------------------------------------------------
+  2026-10-19 07:30  Whiskers  Breakfast feeding      10  high     daily   todo
+  2026-10-19 08:00  Whiskers  Flea medication         5  high     weekly  todo
+  2026-10-19 13:30  Mochi     Vet checkup            60  medium   once    todo
+  2026-10-19 18:00  Mochi     Evening walk           30  medium   daily   todo
 ```
 
 ## 🧪 Testing PawPal+
 
 ```bash
-# Run the full test suite:
-pytest
-
-# Run with coverage:
-pytest --cov
+python -m pytest
 ```
 
-Sample test output:
+**What the 22 tests cover:** task completion; adding tasks to a pet; time validation; the Owner collecting tasks from every pet; sorting (chronological across pets, date before time, empty list); filtering (by pet, by status, both together); recurrence (daily +1 day, weekly +7 days, one-time tasks create nothing); conflict detection (same time across pets, same pet, no false positive for different times or different days, completed tasks ignored); and edge cases such as a pet with no tasks.
+
+Sample passing output:
 
 ```
-# Paste your pytest output here
+============================= test session starts ==============================
+collected 22 items
+
+tests/test_pawpal.py ......................                              [100%]
+
+============================== 22 passed in 0.03s ==============================
 ```
+
+**Confidence level: ★★★★☆ (4/5).** The core behaviors and the main edge cases pass, and I checked the tests can fail by deliberately breaking the sort, recurrence and conflict logic. Not yet tested: overlapping durations, month/year rollover on recurrence, and Streamlit UI behavior beyond a manual walkthrough.
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
-
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | `Scheduler.sort_by_time()` | Sorts by `(due_date, "HH:MM", priority)`. Zero-padded 24-hour strings sort correctly as text. |
+| Filtering | `Scheduler.filter_tasks(pet_name, completed)` | Either filter, both, or neither; pet name is case-insensitive. |
+| Conflict handling | `Scheduler.detect_conflicts()` | Groups pending tasks by exact date and time; returns warning strings for any slot with 2+ tasks. Exact-match only; it does not look at overlapping durations. |
+| Recurring tasks | `Scheduler.mark_task_complete()`, `Task.next_occurrence()` | Daily adds 1 day, weekly adds 7 days (using `timedelta`); the new task goes to the same pet. |
+| Daily view | `Scheduler.todays_schedule()` | Pending tasks for one day, in time order. |
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+1. Run `streamlit run app.py`. The app creates one `Owner` and keeps it in `st.session_state`, so your data survives button clicks.
+2. In **Owner and pets**, type a pet name, pick a species and click **Add pet**. Add at least two pets.
+3. In **Add a task**, choose a pet, describe the task, set a time, duration, priority, repeat frequency and date, then click **Add task**. Add a few tasks in any order.
+4. In **Schedule**, tasks appear sorted by time across all pets. Use the pet and status dropdowns to filter the table.
+5. Add two tasks at the same time. A yellow warning names the conflicting tasks and pets; with no clashes you see a green "No scheduling conflicts" message.
+6. Pick a daily or weekly task under **Mark a task complete** and click the button. It moves to "done" and the next occurrence appears automatically.
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
-
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+The same behaviors can be seen without the UI by running `python main.py` (output shown above).
