@@ -1,49 +1,74 @@
-"""PawPal+ logic layer: Owner, Pet, Task and Scheduler (skeleton)."""
+"""PawPal+ logic layer: Owner, Pet, Task and Scheduler."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import List, Optional
+
+PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+VALID_FREQUENCIES = ("once", "daily", "weekly")
 
 
 @dataclass
 class Task:
-    """A single pet care activity."""
+    """A single pet care activity (walk, feeding, medication, ...)."""
 
     description: str
-    time: str  # "HH:MM"
+    time: str  # 24-hour "HH:MM"
     duration_minutes: int = 15
-    priority: str = "medium"
-    frequency: str = "once"
+    priority: str = "medium"  # "high" | "medium" | "low"
+    frequency: str = "once"  # "once" | "daily" | "weekly"
     due_date: date = field(default_factory=date.today)
     completed: bool = False
-    pet_name: str = ""
+    pet_name: str = ""  # filled in automatically by Pet.add_task
+
+    def __post_init__(self) -> None:
+        """Validate the time, priority and frequency values."""
+        try:
+            datetime.strptime(self.time, "%H:%M")
+        except ValueError:
+            raise ValueError(f"time must be 'HH:MM' (24-hour), got {self.time!r}")
+        if self.priority not in PRIORITY_ORDER:
+            raise ValueError(f"priority must be one of {list(PRIORITY_ORDER)}, got {self.priority!r}")
+        if self.frequency not in VALID_FREQUENCIES:
+            raise ValueError(f"frequency must be one of {list(VALID_FREQUENCIES)}, got {self.frequency!r}")
 
     def mark_complete(self) -> None:
         """Mark this task as done."""
-        pass
+        self.completed = True
+
+    def __str__(self) -> str:
+        """Readable one-line summary of the task."""
+        status = "done" if self.completed else "todo"
+        pet = f" [{self.pet_name}]" if self.pet_name else ""
+        return (
+            f"{self.due_date.isoformat()} {self.time}  {self.description}{pet} "
+            f"({self.duration_minutes} min, {self.priority}, {self.frequency}, {status})"
+        )
 
 
 @dataclass
 class Pet:
-    """A pet and the tasks that belong to it."""
+    """A pet and the care tasks that belong to it."""
 
     name: str
     species: str = "dog"
     tasks: List[Task] = field(default_factory=list)
 
     def add_task(self, task: Task) -> None:
-        """Attach a task to this pet."""
-        pass
+        """Attach a task to this pet and record the pet's name on it."""
+        task.pet_name = self.name
+        self.tasks.append(task)
 
     def remove_task(self, task: Task) -> None:
-        """Remove a task from this pet."""
-        pass
+        """Remove a task from this pet (no error if it is not present)."""
+        if task in self.tasks:
+            self.tasks.remove(task)
 
     def list_tasks(self) -> List[Task]:
-        """Return this pet's tasks."""
-        pass
+        """Return a copy of this pet's task list."""
+        return list(self.tasks)
 
 
 @dataclass
@@ -55,35 +80,32 @@ class Owner:
 
     def add_pet(self, pet: Pet) -> None:
         """Add a pet to this owner."""
-        pass
+        self.pets.append(pet)
 
     def get_pet(self, name: str) -> Optional[Pet]:
-        """Find a pet by name."""
-        pass
+        """Find a pet by name (case-insensitive); None if not found."""
+        for pet in self.pets:
+            if pet.name.lower() == name.lower():
+                return pet
+        return None
 
     def get_all_tasks(self) -> List[Task]:
-        """Return every pet's tasks together."""
-        pass
+        """Return every pet's tasks together in one list."""
+        return [task for pet in self.pets for task in pet.tasks]
 
 
 class Scheduler:
-    """The brain: organizes and manages tasks across all of an owner's pets."""
+    """The brain: retrieves, organizes and manages tasks across all of an owner's pets."""
 
     def __init__(self, owner: Owner) -> None:
         self.owner = owner
 
     def get_all_tasks(self) -> List[Task]:
-        """Read all tasks from the owner."""
-        pass
+        """Read all tasks from the owner (which gathers them from every pet)."""
+        return self.owner.get_all_tasks()
 
-    def sort_by_time(self) -> List[Task]:
-        """Return all tasks in chronological order."""
-        pass
-
-    def filter_tasks(self, pet_name: Optional[str] = None, completed: Optional[bool] = None) -> List[Task]:
-        """Filter tasks by pet name and/or completion status."""
-        pass
-
-    def detect_conflicts(self) -> List[str]:
-        """Return warning messages for tasks scheduled at the same time."""
-        pass
+    def todays_schedule(self, on: Optional[date] = None) -> List[Task]:
+        """Return the not-yet-completed tasks due on a given day (default today), in time order."""
+        day = on or date.today()
+        due = [t for t in self.get_all_tasks() if t.due_date == day and not t.completed]
+        return sorted(due, key=lambda t: (t.time, PRIORITY_ORDER[t.priority]))
